@@ -1,7 +1,7 @@
 export interface ParsedDep {
   name: string;
   version: string;
-  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub";
+  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "packagist";
 }
 
 /**
@@ -21,6 +21,7 @@ export function parseLockfile(filename: string, content: string): ParsedDep[] | 
   if (base === "Gemfile.lock") return parseGemfileLock(content);
   if (base === "Pipfile.lock") return parsePipfileLock(content);
   if (base === "pubspec.lock") return parsePubspecLock(content);
+  if (base === "composer.lock") return parseComposerLock(content);
 
   return null;
 }
@@ -435,6 +436,38 @@ function parsePubspecLock(content: string): ParsedDep[] {
       }
       currentName = null;
       currentSource = null;
+    }
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// composer.lock (PHP/Composer)
+// ---------------------------------------------------------------------------
+function parseComposerLock(content: string): ParsedDep[] {
+  let json: Record<string, unknown>;
+
+  try {
+    json = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const deps: ParsedDep[] = [];
+
+  for (const section of ["packages", "packages-dev"]) {
+    const entries = json[section] as { name?: string; version?: string }[] | undefined;
+    if (!entries) continue;
+
+    for (const entry of entries) {
+      if (!entry.name || !entry.version) continue;
+
+      deps.push({
+        name: entry.name,
+        version: entry.version.replace(/^v/, ""),
+        ecosystem: "packagist",
+      });
     }
   }
 
