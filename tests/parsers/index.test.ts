@@ -327,6 +327,84 @@ describe("Pipfile.lock", () => {
 });
 
 // ---------------------------------------------------------------------------
+// packages.lock.json (NuGet)
+// ---------------------------------------------------------------------------
+
+describe("packages.lock.json", () => {
+  it("extracts packages from a single target framework", () => {
+    const content = JSON.stringify({
+      version: 1,
+      dependencies: {
+        "net8.0": {
+          "Newtonsoft.Json": {
+            type: "Direct",
+            requested: "[13.0.1, )",
+            resolved: "13.0.1",
+            contentHash: "abc123",
+          },
+          Serilog: {
+            type: "Direct",
+            requested: "[3.1.1, )",
+            resolved: "3.1.1",
+            contentHash: "def456",
+          },
+        },
+      },
+    });
+    const result = parseLockfile("packages.lock.json", content);
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({
+      name: "Newtonsoft.Json",
+      version: "13.0.1",
+      ecosystem: "nuget",
+    });
+    expect(result).toContainEqual({ name: "Serilog", version: "3.1.1", ecosystem: "nuget" });
+  });
+
+  it("extracts packages across multiple target frameworks", () => {
+    const content = JSON.stringify({
+      version: 1,
+      dependencies: {
+        "net6.0": {
+          "Newtonsoft.Json": { type: "Direct", resolved: "13.0.1" },
+        },
+        "net8.0": {
+          "Newtonsoft.Json": { type: "Direct", resolved: "13.0.1" },
+          Serilog: { type: "Direct", resolved: "3.1.1" },
+        },
+      },
+    });
+    const result = parseLockfile("packages.lock.json", content);
+    expect(result).toHaveLength(3);
+    expect(result?.filter((d) => d.name === "Newtonsoft.Json")).toHaveLength(2);
+  });
+
+  it("returns empty array for invalid JSON", () => {
+    const result = parseLockfile("packages.lock.json", "not valid json {{{");
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when dependencies field is missing", () => {
+    const result = parseLockfile("packages.lock.json", JSON.stringify({ version: 1 }));
+    expect(result).toEqual([]);
+  });
+
+  it("skips entries with no resolved field", () => {
+    const content = JSON.stringify({
+      version: 1,
+      dependencies: {
+        "net8.0": {
+          Transitive: { type: "Transitive" },
+          Serilog: { type: "Direct", resolved: "3.1.1" },
+        },
+      },
+    });
+    const result = parseLockfile("packages.lock.json", content);
+    expect(result).toEqual([{ name: "Serilog", version: "3.1.1", ecosystem: "nuget" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cargo.lock
 // ---------------------------------------------------------------------------
 
