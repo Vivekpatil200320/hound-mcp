@@ -108,4 +108,29 @@ describe("hound_advisories", () => {
     const text = getText(result);
     expect(text).toContain("github.com/expressjs/express/security/advisories");
   });
+
+  it("does not crash when a CVE-alias lookup omits `package` on an affected entry", async () => {
+    // Regression test for #14: OSV's CVE-alias responses may return
+    // `affected` entries without a `package` object, unlike native
+    // GHSA/OSV ID lookups.
+    const CVE_FIXTURE: OsvVuln = {
+      ...OSV_FIXTURE,
+      id: "CVE-2024-29041",
+      affected: [
+        {
+          ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "4.19.2" }] }],
+        } as OsvVuln["affected"][number],
+      ],
+    };
+    vi.mocked(osv.getVuln).mockResolvedValue(CVE_FIXTURE);
+    vi.mocked(depsdev.getAdvisory).mockResolvedValue(DEPSDEV_ADVISORY_FIXTURE);
+
+    const result = await (
+      tool.handler as (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>
+    )({ id: "CVE-2024-29041" });
+    const text = getText(result);
+    expect(text).toContain("CVE-2024-29041");
+    expect(text).toContain("(package details unavailable)");
+    expect(text).toContain("fixed in 4.19.2");
+  });
 });
