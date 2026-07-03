@@ -38,7 +38,9 @@ export interface OsvRange {
 }
 
 export interface OsvAffected {
-  package: {
+  // Some OSV records — notably CVE-alias lookups, as opposed to native
+  // OSV/GHSA IDs — omit `package` entirely on one or more `affected` entries.
+  package?: {
     name: string;
     ecosystem: string;
     purl?: string;
@@ -215,7 +217,7 @@ export function extractFixVersions(vuln: OsvVuln, ecosystem: Ecosystem): string[
   const fixed = new Set<string>();
 
   for (const affected of vuln.affected) {
-    if (affected.package.ecosystem.toLowerCase() !== osvEcosystem.toLowerCase()) {
+    if (affected.package?.ecosystem.toLowerCase() !== osvEcosystem.toLowerCase()) {
       continue;
     }
     for (const range of affected.ranges) {

@@ -291,6 +291,25 @@ describe("extractFixVersions", () => {
     const versions = extractFixVersions(vuln, "npm");
     expect(versions.filter((v) => v === "4.19.2")).toHaveLength(1);
   });
+
+  it("skips affected entries missing `package` instead of throwing", () => {
+    // Regression test for #14: CVE-alias lookups can return `affected`
+    // entries without a `package` object.
+    const vuln: OsvVuln = {
+      ...VULN_FIXTURE,
+      affected: [
+        {
+          ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "4.19.2" }] }],
+        } as OsvVuln["affected"][number],
+        {
+          package: { name: "express", ecosystem: "npm" },
+          ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "4.19.3" }] }],
+        },
+      ],
+    };
+    expect(() => extractFixVersions(vuln, "npm")).not.toThrow();
+    expect(extractFixVersions(vuln, "npm")).toEqual(["4.19.3"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

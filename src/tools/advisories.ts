@@ -50,7 +50,13 @@ export function register(server: McpServer) {
           lines.push("─".repeat(30));
 
           for (const affected of vuln.affected) {
-            lines.push(`  ${affected.package.ecosystem}: ${affected.package.name}`);
+            // Some OSV records — notably CVE-alias lookups — omit `package`
+            // on one or more `affected` entries. Fall back to a generic
+            // label rather than crashing on the missing field.
+            const label = affected.package
+              ? `${affected.package.ecosystem}: ${affected.package.name}`
+              : "(package details unavailable)";
+            lines.push(`  ${label}`);
 
             for (const range of affected.ranges) {
               if (range.type === "SEMVER") {
