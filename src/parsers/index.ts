@@ -21,6 +21,7 @@ export function parseLockfile(filename: string, content: string): ParsedDep[] | 
   if (base === "Gemfile.lock") return parseGemfileLock(content);
   if (base === "Pipfile.lock") return parsePipfileLock(content);
   if (base === "pubspec.lock") return parsePubspecLock(content);
+  if (base === "bun.lock") return parseBunLock(content);
 
   return null;
 }
@@ -436,6 +437,46 @@ function parsePubspecLock(content: string): ParsedDep[] {
       currentName = null;
       currentSource = null;
     }
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// bun.lock (Bun's text-based lockfile, default since Bun v1.2)
+// ---------------------------------------------------------------------------
+// Note: this is Bun's current text/JSONC lockfile format, not the older
+// binary bun.lockb format. bun.lockb has no public parsing spec — it's an
+// internal binary serialization with no documented layout, so we don't
+// attempt to parse it here. See the PR description for more context.
+function parseBunLock(content: string): ParsedDep[] {
+  let json: Record<string, unknown>;
+
+  try {
+    json = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const deps: ParsedDep[] = [];
+
+  // "packages" maps package name -> [resolution, ...]. The resolution string
+  // is "<name>@<version>" for registry deps (or "<name>@workspace:..."/
+  // "<name>@git+..." for non-registry deps, which we skip).
+  const packages = json.packages as Record<string, unknown> | undefined;
+
+  if (!packages) return deps;
+
+  for (const [name, entry] of Object.entries(packages)) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
+
+    const resolution = entry[0];
+    if (!resolution.startsWith(`${name}@`)) continue;
+
+    const version = resolution.slice(name.length + 1);
+    if (!version || version.includes(":")) continue;
+
+    deps.push({ name, version, ecosystem: "npm" });
   }
 
   return deps;
