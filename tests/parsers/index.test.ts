@@ -600,3 +600,60 @@ sdks:
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// gradle.lockfile (Gradle/Java)
+// ---------------------------------------------------------------------------
+
+describe("gradle.lockfile", () => {
+  it("extracts dependencies from a typical lockfile", () => {
+    const content = `# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+com.google.guava:guava:31.1-jre=compileClasspath,runtimeClasspath
+org.springframework:spring-core:5.3.20=compileClasspath
+empty=annotationProcessor,testCompileClasspath
+`;
+    const result = parseLockfile("gradle.lockfile", content);
+    expect(result).toHaveLength(2);
+    expect(result).toContainEqual({
+      name: "com.google.guava:guava",
+      version: "31.1-jre",
+      ecosystem: "maven",
+    });
+    expect(result).toContainEqual({
+      name: "org.springframework:spring-core",
+      version: "5.3.20",
+      ecosystem: "maven",
+    });
+  });
+
+  it("skips comment lines", () => {
+    const content = `# comment one
+# comment two
+com.example:lib:1.0.0=compileClasspath
+`;
+    const result = parseLockfile("gradle.lockfile", content);
+    expect(result).toEqual([{ name: "com.example:lib", version: "1.0.0", ecosystem: "maven" }]);
+  });
+
+  it("skips the empty= metadata line", () => {
+    const content = `empty=annotationProcessor,testCompileClasspath\n`;
+    const result = parseLockfile("gradle.lockfile", content);
+    expect(result).toEqual([]);
+  });
+
+  it("returns an empty array for blank content", () => {
+    const result = parseLockfile("gradle.lockfile", "");
+    expect(result).toEqual([]);
+  });
+
+  it("ignores malformed lines that don't match group:artifact:version=", () => {
+    const content = `not-a-valid-line
+com.example:lib:1.0.0=compileClasspath
+another:malformed
+`;
+    const result = parseLockfile("gradle.lockfile", content);
+    expect(result).toEqual([{ name: "com.example:lib", version: "1.0.0", ecosystem: "maven" }]);
+  });
+});

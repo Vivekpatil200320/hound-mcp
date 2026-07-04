@@ -1,7 +1,7 @@
 export interface ParsedDep {
   name: string;
   version: string;
-  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub";
+  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "maven";
 }
 
 /**
@@ -21,6 +21,7 @@ export function parseLockfile(filename: string, content: string): ParsedDep[] | 
   if (base === "Gemfile.lock") return parseGemfileLock(content);
   if (base === "Pipfile.lock") return parsePipfileLock(content);
   if (base === "pubspec.lock") return parsePubspecLock(content);
+  if (base === "gradle.lockfile") return parseGradleLockfile(content);
 
   return null;
 }
@@ -436,6 +437,36 @@ function parsePubspecLock(content: string): ParsedDep[] {
       currentName = null;
       currentSource = null;
     }
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// gradle.lockfile (Gradle/Java, single-file dependency locking format)
+// ---------------------------------------------------------------------------
+function parseGradleLockfile(content: string): ParsedDep[] {
+  const deps: ParsedDep[] = [];
+
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+
+    // Comment lines and metadata lines (e.g. "empty=testCompileClasspath")
+    // carry no dependency coordinate — skip them.
+    if (!line || line.startsWith("#") || line.startsWith("empty=")) continue;
+
+    // <group>:<artifact>:<version>=<comma-separated configurations>
+    const match = /^([^:=]+):([^:=]+):([^:=]+)=/.exec(line);
+    if (!match) continue;
+
+    const [, group, artifact, version] = match;
+    if (!group || !artifact || !version) continue;
+
+    deps.push({
+      name: `${group}:${artifact}`,
+      version,
+      ecosystem: "maven",
+    });
   }
 
   return deps;
