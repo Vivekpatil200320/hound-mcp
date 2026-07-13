@@ -1,7 +1,7 @@
 export interface ParsedDep {
   name: string;
   version: string;
-  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "maven";
+  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "nuget" | "packagist" | "maven";
 }
 
 /**
@@ -22,6 +22,8 @@ export function parseLockfile(filename: string, content: string): ParsedDep[] | 
   if (base === "Pipfile.lock") return parsePipfileLock(content);
   if (base === "pubspec.lock") return parsePubspecLock(content);
   if (base === "gradle.lockfile") return parseGradleLockfile(content);
+  if (base === "packages.lock.json") return parseNuGetLock(content);
+  if (base === "composer.lock") return parseComposerLock(content);
 
   return null;
 }
@@ -467,6 +469,75 @@ function parseGradleLockfile(content: string): ParsedDep[] {
       version,
       ecosystem: "maven",
     });
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// packages.lock.json (NuGet)
+// ---------------------------------------------------------------------------
+function parseNuGetLock(content: string): ParsedDep[] {
+  let json: Record<string, unknown>;
+
+  try {
+    json = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const deps: ParsedDep[] = [];
+
+  // "dependencies" is a map of target-framework (e.g. "net8.0") to a map of
+  // package name -> { resolved, type, contentHash, ... }
+  const targets = json.dependencies as
+    | Record<string, Record<string, { resolved?: string }>>
+    | undefined;
+
+  if (!targets) return deps;
+
+  for (const packages of Object.values(targets)) {
+    for (const [name, val] of Object.entries(packages)) {
+      if (!val.resolved) continue;
+
+      deps.push({
+        name,
+        version: val.resolved,
+        ecosystem: "nuget",
+      });
+    }
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// composer.lock (PHP/Composer)
+// ---------------------------------------------------------------------------
+function parseComposerLock(content: string): ParsedDep[] {
+  let json: Record<string, unknown>;
+
+  try {
+    json = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const deps: ParsedDep[] = [];
+
+  for (const section of ["packages", "packages-dev"]) {
+    const entries = json[section] as { name?: string; version?: string }[] | undefined;
+    if (!entries) continue;
+
+    for (const entry of entries) {
+      if (!entry.name || !entry.version) continue;
+
+      deps.push({
+        name: entry.name,
+        version: entry.version.replace(/^v/, ""),
+        ecosystem: "packagist",
+      });
+    }
   }
 
   return deps;
