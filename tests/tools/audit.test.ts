@@ -65,6 +65,23 @@ describe("hound_audit", () => {
     expect(text).toContain("GHSA-critical");
   });
 
+  it("parses composer.lock and reports clean", async () => {
+    vi.mocked(osv.queryVulnsBatch).mockResolvedValue([[]]);
+
+    const content = JSON.stringify({
+      packages: [{ name: "laravel/framework", version: "v10.0.0" }],
+    });
+
+    const result = await (tool.handler as (args: Record<string, unknown>) => Promise<unknown>)({
+      lockfile_content: content,
+      lockfile_name: "composer.lock",
+    });
+
+    const text = (result as { content: { text: string }[] }).content[0]?.text ?? "";
+    expect(text).toContain("Hound Audit Report");
+    expect(text).toContain("No known vulnerabilities");
+  });
+
   it("parses requirements.txt and reports clean", async () => {
     vi.mocked(osv.queryVulnsBatch).mockResolvedValue([[], []]);
 
@@ -81,7 +98,7 @@ describe("hound_audit", () => {
   it("returns error for unsupported lockfile format", async () => {
     const result = await (tool.handler as (args: Record<string, unknown>) => Promise<unknown>)({
       lockfile_content: "{}",
-      lockfile_name: "composer.lock",
+      lockfile_name: "bower.json",
     });
 
     const text = (result as { content: { text: string }[] }).content[0]?.text ?? "";

@@ -678,3 +678,70 @@ sdks:
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// composer.lock (PHP/Composer)
+// ---------------------------------------------------------------------------
+
+describe("composer.lock", () => {
+  it("extracts packages from both packages and packages-dev", () => {
+    const content = JSON.stringify({
+      packages: [
+        { name: "laravel/framework", version: "v10.0.0" },
+        { name: "guzzlehttp/guzzle", version: "7.5.0" },
+      ],
+      "packages-dev": [{ name: "phpunit/phpunit", version: "10.0.0" }],
+    });
+    const result = parseLockfile("composer.lock", content);
+    expect(result).toHaveLength(3);
+    expect(result).toContainEqual({
+      name: "laravel/framework",
+      version: "10.0.0",
+      ecosystem: "packagist",
+    });
+    expect(result).toContainEqual({
+      name: "guzzlehttp/guzzle",
+      version: "7.5.0",
+      ecosystem: "packagist",
+    });
+    expect(result).toContainEqual({
+      name: "phpunit/phpunit",
+      version: "10.0.0",
+      ecosystem: "packagist",
+    });
+  });
+
+  it("strips leading v from version strings", () => {
+    const content = JSON.stringify({
+      packages: [{ name: "laravel/framework", version: "v10.0.0" }],
+    });
+    const result = parseLockfile("composer.lock", content);
+    expect(result).toEqual([
+      { name: "laravel/framework", version: "10.0.0", ecosystem: "packagist" },
+    ]);
+  });
+
+  it("returns empty array for invalid JSON", () => {
+    const result = parseLockfile("composer.lock", "not valid json {{{");
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when neither packages nor packages-dev is present", () => {
+    const result = parseLockfile("composer.lock", JSON.stringify({ "content-hash": "abc" }));
+    expect(result).toEqual([]);
+  });
+
+  it("skips entries missing name or version", () => {
+    const content = JSON.stringify({
+      packages: [
+        { name: "laravel/framework" },
+        { version: "1.0.0" },
+        { name: "guzzlehttp/guzzle", version: "7.5.0" },
+      ],
+    });
+    const result = parseLockfile("composer.lock", content);
+    expect(result).toEqual([
+      { name: "guzzlehttp/guzzle", version: "7.5.0", ecosystem: "packagist" },
+    ]);
+  });
+});

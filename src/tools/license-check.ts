@@ -83,8 +83,9 @@ export function register(server: McpServer) {
       inputSchema: {
         lockfile_content: z.string().describe("Full text content of the lockfile"),
 
-        // pubspec.lock is intentionally omitted here because deps.dev does not
-        // support the Pub ecosystem. The handler below returns an explicit message.
+        // pubspec.lock and composer.lock are intentionally omitted here because
+        // deps.dev does not support the Pub or Packagist ecosystems. The handler
+        // below returns an explicit message for both.
         lockfile_name: z
           .string()
           .describe(
@@ -120,6 +121,18 @@ export function register(server: McpServer) {
             {
               type: "text",
               text: "License checking for pubspec.lock is not currently supported because deps.dev does not support the Pub ecosystem.",
+            },
+          ],
+        };
+      }
+
+      // Same limitation for Packagist (composer.lock) — deps.dev has no PHP ecosystem support.
+      if (deps.some((dep) => dep.ecosystem === "packagist")) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "License checking for composer.lock is not currently supported because deps.dev does not support the Packagist ecosystem.",
             },
           ],
         };
