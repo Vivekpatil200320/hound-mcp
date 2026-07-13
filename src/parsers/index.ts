@@ -1,7 +1,7 @@
 export interface ParsedDep {
   name: string;
   version: string;
-  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "packagist";
+  ecosystem: "npm" | "pypi" | "cargo" | "go" | "rubygems" | "pub" | "nuget" | "packagist";
 }
 
 /**
@@ -21,6 +21,7 @@ export function parseLockfile(filename: string, content: string): ParsedDep[] | 
   if (base === "Gemfile.lock") return parseGemfileLock(content);
   if (base === "Pipfile.lock") return parsePipfileLock(content);
   if (base === "pubspec.lock") return parsePubspecLock(content);
+  if (base === "packages.lock.json") return parseNuGetLock(content);
   if (base === "composer.lock") return parseComposerLock(content);
 
   return null;
@@ -436,6 +437,43 @@ function parsePubspecLock(content: string): ParsedDep[] {
       }
       currentName = null;
       currentSource = null;
+    }
+  }
+
+  return deps;
+}
+
+// ---------------------------------------------------------------------------
+// packages.lock.json (NuGet)
+// ---------------------------------------------------------------------------
+function parseNuGetLock(content: string): ParsedDep[] {
+  let json: Record<string, unknown>;
+
+  try {
+    json = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+
+  const deps: ParsedDep[] = [];
+
+  // "dependencies" is a map of target-framework (e.g. "net8.0") to a map of
+  // package name -> { resolved, type, contentHash, ... }
+  const targets = json.dependencies as
+    | Record<string, Record<string, { resolved?: string }>>
+    | undefined;
+
+  if (!targets) return deps;
+
+  for (const packages of Object.values(targets)) {
+    for (const [name, val] of Object.entries(packages)) {
+      if (!val.resolved) continue;
+
+      deps.push({
+        name,
+        version: val.resolved,
+        ecosystem: "nuget",
+      });
     }
   }
 
