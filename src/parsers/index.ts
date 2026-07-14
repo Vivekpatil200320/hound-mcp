@@ -1,3 +1,5 @@
+import { parseJsonc } from "../utils/jsonc.js";
+
 export interface ParsedDep {
   name: string;
   version: string;
@@ -449,32 +451,59 @@ function parsePubspecLock(content: string): ParsedDep[] {
 // binary bun.lockb format. bun.lockb has no public parsing spec — it's an
 // internal binary serialization with no documented layout, so we don't
 // attempt to parse it here. See the PR description for more context.
+/**
+ * Split a bun.lock resolution string ("<name>@<version>") into its name and
+ * version. Handles scoped packages ("@scope/name@version") by skipping the
+ * leading "@" before looking for the name/version separator.
+ */
+function parseBunResolution(resolution: string): { name: string; version: string } | null {
+  const searchFrom = resolution.startsWith("@") ? 1 : 0;
+  const atIndex = resolution.indexOf("@", searchFrom);
+  if (atIndex === -1) return null;
+
+  const name = resolution.slice(0, atIndex);
+  const version = resolution.slice(atIndex + 1);
+  if (!name || !version) return null;
+
+  return { name, version };
+}
+
 function parseBunLock(content: string): ParsedDep[] {
   let json: Record<string, unknown>;
 
   try {
-    json = JSON.parse(content) as Record<string, unknown>;
+    // bun.lock is JSONC (Bun-authored files routinely include trailing
+    // commas), which JSON.parse rejects outright.
+    json = parseJsonc(content) as Record<string, unknown>;
   } catch {
     return [];
   }
 
   const deps: ParsedDep[] = [];
+  const seen = new Set<string>();
 
-  // "packages" maps package name -> [resolution, ...]. The resolution string
-  // is "<name>@<version>" for registry deps (or "<name>@workspace:..."/
-  // "<name>@git+..." for non-registry deps, which we skip).
+  // "packages" maps a package key -> [resolution, ...]. For hoisted
+  // top-level deps the key equals the package name, but nested/transitive
+  // deps (multiple versions of the same package) are keyed by a path like
+  // "parent/child" instead — so the true name/version must always be read
+  // from the resolution string ("<name>@<version>"), never assumed to match
+  // the object key.
   const packages = json.packages as Record<string, unknown> | undefined;
 
   if (!packages) return deps;
 
-  for (const [name, entry] of Object.entries(packages)) {
+  for (const entry of Object.values(packages)) {
     if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
 
-    const resolution = entry[0];
-    if (!resolution.startsWith(`${name}@`)) continue;
+    const parsed = parseBunResolution(entry[0]);
+    if (!parsed) continue;
 
-    const version = resolution.slice(name.length + 1);
-    if (!version || version.includes(":")) continue;
+    const { name, version } = parsed;
+    if (!version || version.includes(":")) continue; // skip workspace:/git+ refs
+
+    const key = `${name}@${version}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     deps.push({ name, version, ecosystem: "npm" });
   }
